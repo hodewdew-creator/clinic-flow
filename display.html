@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
+  <title>BS 보호자 모니터 (내부용)</title>
+  <style>
+    :root{
+      --bg:#0b1220; --fg:#ffffff; --muted:#9ca3af;
+      --card:#111827cc; --border:#1f2937; --blur:8px;
+      --brand:#2b5fa3;
+      --s-red:#dc2626; --s-amber:#d97706; --s-sky:#0284c7; --s-green:#111827; --s-gray:#64748b;
+    }
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto}
+    .topbar{
+      position:fixed; inset:0 0 auto 0; z-index:10;
+      display:flex; align-items:center; justify-content:space-between; gap:12px;
+      padding:10px 14px; background:var(--card); border-bottom:1px solid var(--border); backdrop-filter:blur(var(--blur));
+      font-size:12px;
+    }
+    .brandwrap{display:flex; align-items:center; gap:10px; font-weight:900}
+    .logo{width:22px;height:22px;border-radius:5px;object-fit:cover}
+    .brand{letter-spacing:.2px}
+    .right{display:flex;align-items:center;gap:8px}
+    .whoami{opacity:.8}
+    .tbtn{cursor:pointer;border:0;border-radius:8px;padding:6px 8px;background:#1f2937;color:#fff;border:1px solid #374151}
+    .tbtn.ok{background:var(--brand);border-color:transparent}
+    .pill{border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;background:#1f2937;border:1px solid #374151}
+    .pill.ok{background:#111827}.pill.err{background:#dc2626}.pill.warn{background:#f59e0b;color:#111}
+
+    .wrap{min-height:100%;padding:64px 14px 20px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+    .card{
+      background:var(--card); border:1px solid var(--border); border-radius:16px;
+      padding:14px; display:flex; flex-direction:column; gap:10px;
+    }
+    .card.call{outline:4px solid rgba(220,38,38,.6); outline-offset:-4px; animation:call 1.2s linear infinite}
+    @keyframes call{0%,100%{outline-color:rgba(220,38,38,.2)}50%{outline-color:rgba(220,38,38,.8)}}
+
+    .head{display:flex; align-items:center; justify-content:space-between; gap:10px}
+    .name{font-weight:900; font-size:18px; word-break:keep-all}
+    .badge{
+      border-radius:999px; padding:6px 10px; font-weight:900; font-size:12px; white-space:nowrap;
+      border:1px solid #374151; background:#1f2937; color:#fff;
+    }
+    .b-상담대기중{background:var(--s-red); border-color:transparent}
+    .b-면회대기중{background:var(--s-red); border-color:transparent; color:#fff;}
+    .b-원내,.b-라운지{background:#FFD9DF; color:#111; border-color:transparent}
+    .b-외출{background:#C084FC; color:#111; border-color:transparent}
+    .b-라운지콜완료,.b-외출콜완료{background:#34D399; border-color:transparent}
+    .b-귀가,.b-수납후미귀가{background:#9CA3AF; color:#111; border-color:transparent}
+    .b-1진료실,.b-2진료실,.b-3진료실,.b-4진료실{ background:#2b5fa3; color:#fff; border-color:transparent; }
+
+    .memo{
+      display:none; font-size:14px; line-height:1.25; font-weight:800;
+      color:#111; background:#FFF176; border:1px solid #f59e0b;
+      padding:5px 8px; border-radius:10px; display:inline-block; align-self:flex-start;
+      max-width:100%; overflow-wrap:anywhere;
+    }
+    .memo.show{ display:inline-block; }
+    .meta{font-size:12px; color:var(--muted)}
+    .actions{display:flex; gap:8px; flex-wrap:wrap}
+    .btn{cursor:pointer; border:0; border-radius:10px; padding:8px 12px; font-size:13px; font-weight:700;
+      background:#1f2937; color:#fff; border:1px solid #374151;}
+    .btn.ghost{background:transparent; color:#9CA3AF}
+
+    .errbox{display:none;background:#fee2e2;color:#7f1d1d;border:2px solid #ef4444;border-radius:12px;padding:10px 12px;margin:8px 0;font-weight:700;white-space:pre-wrap}
+    .errbox.show{display:block}
+
+    /* ====== 확인 팝업(오버레이) ====== */
+    .overlay{position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center; background:rgba(2,6,23,.65); backdrop-filter:blur(4px)}
+    .overlay.show{display:flex}
+    .modal{width:min(720px,92vw); background:#fff; color:#0f172a; border-radius:16px; border:3px solid #ef4444; box-shadow:0 20px 60px rgba(0,0,0,.35); padding:22px; text-align:center; animation:flash .9s ease-in-out 1}
+    @keyframes flash{0%{transform:scale(.98)}100%{transform:scale(1)}}
+    .modal h2{margin:0 0 6px; font-size:24px; font-weight:600}
+    .who{font-size:40px; font-weight:900; margin:6px 0 2px}
+    .hint{font-size:13px; color:#64748b; margin-bottom:14px}
+    .m-actions{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:8px}
+    .m-actions .btn{padding:12px 16px; font-size:15px}
+    .m-close{position:absolute; top:10px; right:12px; background:transparent; color:#fff; border:0; font-size:24px; cursor:pointer}
+
+    .emoji{font-family: "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","Segoe UI Symbol",sans-serif; font-weight:400; line-height:1; vertical-align:-2px;}
+
+    .modal h2{font-weight:800; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; text-rendering:optimizeLegibility;}
+    .modal{will-change:transform; transform:translateZ(0);}
+    .btn.ghost{ background:#1f2937; border:1px solid #4b5563; opacity:.9 }
+    .btn.ghost:active{ transform: translateY(1px); }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brandwrap">
+      <img class="logo" src="image-512.png" alt="BS Logo" />
+      <div class="brand">BS 보호자 모니터 (내부용)</div>
+    </div>
+    <div class="right">
+      <span id="whoami" class="whoami"></span>
+      <button id="loginBtn" class="tbtn ok">Google 로그인</button>
+      <button id="logoutBtn" class="tbtn" style="display:none">로그아웃</button>
+      <span id="conn" class="pill warn">연결 확인 중…</span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div id="err" class="errbox"></div>
+    <div id="grid" class="grid"></div>
+  </div>
+
+  <!-- 🔔 알림음 (ding.mp3, 루트폴더) -->
+  <audio id="ding" src="ding.mp3" preload="auto"></audio>
+
+  <!-- ▶ 확인 팝업(디스플레이 측) -->
+  <div id="ackOverlay" class="overlay" aria-hidden="true">
+    <button id="ackClose" class="m-close" title="닫기">✕</button>
+    <div class="modal" role="dialog" aria-modal="true">
+     <h2><span class="emoji">📣</span> 대기 환자 확인</h2>
+      <div id="ackWho" class="who"></div>
+      <div class="hint">“확인”을 누르면 리셉에 ‘대기중 전달완료’로 안내됩니다. ("보류"를 누르면 이 컴퓨터에서의 팝업창만 사라집니다.) </div>
+      <div class="m-actions">
+        <button id="ackHold" class="btn ghost">보류</button>
+        <button id="ackConfirm" class="btn">확인</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    const grid=document.getElementById('grid');
+    const conn=document.getElementById('conn');
+    const ding=document.getElementById('ding');
+    const errBox=document.getElementById('err');
+    const whoami=document.getElementById('whoami');
+    const loginBtn=document.getElementById('loginBtn');
+    const logoutBtn=document.getElementById('logoutBtn');
+
+    const showErr=(m)=>{console.error(m);errBox.textContent=m;errBox.classList.add('show')};
+    const hideErr=()=>errBox.classList.remove('show');
+
+    const relTime=(ts)=>{if(!ts)return "";const s=Math.floor((Date.now()-ts)/1000);
+      if(s<60)return`${s}초 전`;const m=Math.floor(s/60);if(m<60)return`${m}분 전`;
+      const h=Math.floor(m/60);if(h<24)return`${h}시간 전`;const d=Math.floor(h/24);return`${d}일 전`};
+    const formatKTime=(ts)=>{if(!ts)return"";const d=new Date(ts);let h=d.getHours();const m=String(d.getMinutes()).padStart(2,"0");const ap=h<12?"오전":"오후";h=h%12||12;return`${ap} ${h}:${m}`};
+
+    setInterval(()=>{document.querySelectorAll('[data-updated]').forEach(el=>{
+      const ts=Number(el.dataset.updated||0);
+      el.textContent = ts ? `업데이트: ${relTime(ts)} (${formatKTime(ts)})` : '';
+    });},30_000);
+
+    const isClinic=(s)=>/^[1-4]\s?진료실$/.test((s||'').trim());
+    const badgeClass=(s)=>({
+      '상담대기중':'b-상담대기중','면회대기중':'b-면회대기중',
+      '원내':'b-원내','라운지':'b-라운지','외출':'b-외출',
+      '라운지콜완료':'b-라운지콜완료','외출콜완료':'b-외출콜완료',
+      '귀가':'b-귀가','수납후미귀가':'b-수납후미귀가',
+      '1 진료실':'b-1진료실','2 진료실':'b-2진료실','3 진료실':'b-3진료실','4 진료실':'b-4진료실',
+      '1진료실':'b-1진료실','2진료실':'b-2진료실','3진료실':'b-3진료실','4진료실':'b-4진료실'
+    }[s]||'');
+
+    let auth, provider, db;
+
+    const ackOverlay = document.getElementById('ackOverlay');
+    const ackWho     = document.getElementById('ackWho');
+    const ackConfirm = document.getElementById('ackConfirm');
+    const ackClose   = document.getElementById('ackClose');
+    const ackHold    = document.getElementById('ackHold');
+
+    const holdKey = (id, reqAt)=> `ackHold:${id}:${Number(reqAt||0)}`;
+
+    let modalTargetId = null;
+    let modalTargetReqAt = 0;
+    const lastSeenReqAt = new Map();
+
+    function openAck(name, id, reqAt){
+      modalTargetId = id;
+      modalTargetReqAt = Number(reqAt||0);
+      ackWho.textContent = name;
+      ackOverlay.classList.add('show');
+      ackOverlay.setAttribute('aria-hidden','false');
+      try{ ding.currentTime=0; ding.play().catch(()=>{});}catch(e){}
+    }
+    function closeAck(){
+      ackOverlay.classList.remove('show');
+      ackOverlay.setAttribute('aria-hidden','true');
+    }
+
+        try{
+      const { initializeApp }=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
+      const { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc }=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
+      const { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut }=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+
+      const firebaseConfig={apiKey:"AIzaSyDxhY_FjNOp_F0g-DXypaoN7RRjFqNIoG4",authDomain:"bs-owner-monitor.firebaseapp.com",projectId:"bs-owner-monitor"};
+      const app=initializeApp(firebaseConfig);
+      db=getFirestore(app);
+
+      auth=getAuth(app);
+      await setPersistence(auth, browserLocalPersistence).catch(e=>showErr('Persistence 설정 실패: '+e.message));
+      provider=new GoogleAuthProvider();
+      getRedirectResult(auth).catch(e=>showErr('리다이렉트 결과 오류: '+e.message));
+
+      async function doLogin(){
+        try{ await signInWithPopup(auth, provider); }
+        catch(e){
+          if(e?.code==='auth/operation-not-supported-in-this-environment' || String(e?.message||'').includes('popup')){
+            showErr('팝업 로그인 불가 → 리다이렉트 로그인으로 진행합니다.');
+            await signInWithRedirect(auth, provider);
+            return;
+          }
+          showErr('로그인 실패: '+(e.code||'')+' '+e.message);
+        }
+      }
+      loginBtn.onclick=doLogin;
+      logoutBtn.onclick=async()=>{ try{ await signOut(auth); }catch(e){ showErr('로그아웃 실패: '+e.message);} };
+      onAuthStateChanged(auth,(user)=>{
+        if(user){ whoami.textContent=user.email; logoutBtn.style.display=''; loginBtn.style.display='none'; }
+        else{ whoami.textContent=''; logoutBtn.style.display='none'; loginBtn.style.display=''; }
+      });
+
+      onSnapshot(query(collection(db,"cases"),orderBy("createdAt","desc")),(snap)=>{
+        hideErr();
+
+        const docs = snap.docs.map(x=>({ id:x.id, ...x.data() }));
+        const byId = new Map(docs.map(d=>[d.id,d]));
+
+        // 다른 기기에서 '확인' 처리되면 현재 팝업 닫기
+        if (modalTargetId) {
+          const fresh = byId.get(modalTargetId);
+          if (fresh) {
+            const reqAt = Number(fresh.ackRequestedAt||0);
+            if (fresh.ackConfirmed === true) {
+              lastSeenReqAt.set(modalTargetId, reqAt);
+              closeAck();
+              modalTargetId = null;
+            }
+          }
+        }
+
+        // 새 요청 탐지 → 팝업 오픈 (상담/면회만)
+        if (!modalTargetId) {
+          const cands = docs.filter(d=>{
+            const s=d.location||'';
+            const reqAt = Number(d.ackRequestedAt||0);
+            const seen  = lastSeenReqAt.get(d.id)||0;
+            const held = (function(){ try{ return localStorage.getItem(holdKey(d.id, reqAt))==='1'; }catch(e){ return false; } })();
+            return (s==="상담대기중"||s==="면회대기중") && reqAt>0 && !d.ackConfirmed && reqAt>seen && !held;
+          });
+          if (cands.length){
+            cands.sort((a,b)=>(a.ackRequestedAt||0)-(b.ackRequestedAt||0));
+            const p = cands[0];
+            const nm = (p.patientName||p.guardianName)
+              ? (p.patientName && p.guardianName ? `${p.patientName}(${p.guardianName})` : (p.patientName||p.guardianName)) : p.id;
+            openAck(nm, p.id, p.ackRequestedAt);
+          }
+        }
+
+        // 카드 렌더 및 알림음 트리거
+        const frag=document.createDocumentFragment();
+        if(!window._prevState){ window._prevState=new Map(); window._prevHasMemo=new Map(); window._lastCall=new Set(); window._inited=false; }
+        const prevState=window._prevState, prevHasMemo=window._prevHasMemo, lastCall=window._lastCall, inited=window._inited;
+
+        // 정렬: 상담/면회(0) → 진료실(1) → 기타(2) → 귀가/수납후미귀가(3)
+        docs.sort((a,b)=>{
+          const rank=(d)=>{
+            const s=d.location||'';
+            if(s==="상담대기중" || s==="면회대기중") return 0;
+            if(/^[1-4]\s?진료실$/.test(s)) return 1;
+            if(s==="귀가"||s==="수납후미귀가") return 3;
+            return 2;
+          };
+          const oa=rank(a), ob=rank(b);
+          if(oa!==ob) return oa-ob;
+          return (b.createdAt||0)-(a.createdAt||0);
+        });
+
+        docs.forEach(d=>{
+          let shouldDing=false;
+          const curState=d.location||"";
+          const curHasMemo=!!((d.memo||"").trim());
+
+          if(inited){
+            if(d.callRequested && !lastCall.has(d.id)) shouldDing=true;
+            const ps=prevState.get(d.id);
+            if((curState==="상담대기중"||curState==="면회대기중") && curState!==ps) shouldDing=true;
+            const pm=prevHasMemo.get(d.id);
+            if(curHasMemo && !pm) shouldDing=true;
+          }
+          if(d.callRequested) lastCall.add(d.id); else lastCall.delete(d.id);
+          if(shouldDing){ try{ ding.currentTime=0; ding.play().catch(()=>{});}catch(e){} }
+          prevState.set(d.id,curState); prevHasMemo.set(d.id,curHasMemo);
+
+          const card=document.createElement('div');card.className='card';
+          if(d.callRequested) card.classList.add('call');
+
+          const head=document.createElement('div');head.className='head';
+          const name=document.createElement('div');name.className='name';
+          name.textContent=(d.patientName||d.guardianName)
+            ?(d.patientName&&d.guardianName?`${d.patientName}(${d.guardianName})`:(d.patientName||d.guardianName))
+            :d.id;
+          const badge=document.createElement('span');badge.className='badge '+(badgeClass(curState)||''); badge.textContent=curState||'상태없음';
+          head.appendChild(name); head.appendChild(badge);
+          card.appendChild(head);
+
+          const memoTxt=(d.memo||"").trim();
+          if(memoTxt){
+            const memo=document.createElement('div');memo.className='memo show';
+            memo.textContent=memoTxt.length>140?memoTxt.slice(0,137)+'…':memoTxt;
+            card.appendChild(memo);
+          }
+
+          const meta=document.createElement('div');meta.className='meta';
+          meta.dataset.updated=d.updatedAt||0;
+          meta.textContent=d.updatedAt?`업데이트: ${relTime(d.updatedAt)} (${formatKTime(d.updatedAt)})`:'';
+          card.appendChild(meta);
+
+          const actions=document.createElement('div');actions.className='actions';
+          const callBtn=document.createElement('button');callBtn.className='btn';callBtn.textContent='📣 콜요청하기';
+          const cancelBtn=document.createElement('button');cancelBtn.className='btn ghost';cancelBtn.textContent='콜요청취소';
+          callBtn.onclick=()=> requireLoginThen(()=>updateCase(d.id,{callRequested:true,callRequestedAt:Date.now()}));
+          cancelBtn.onclick=()=> requireLoginThen(()=>updateCase(d.id,{callRequested:false}));
+          actions.appendChild(callBtn);actions.appendChild(cancelBtn);
+          card.appendChild(actions);
+
+          frag.appendChild(card);
+        });
+        const gridEl=document.getElementById('grid'); gridEl.innerHTML=''; gridEl.appendChild(frag);
+        window._inited=true;
+
+        conn.textContent='연결됨'; conn.className='pill ok';
+      },(e)=>{conn.textContent='연결 오류';conn.className='pill err';showErr('리스트 구독 실패: '+e.message);});
+
+      function requireLoginThen(fn){
+        if(auth.currentUser){ fn(); return; }
+        showErr('이 작업은 로그인 후 가능합니다. 로그인 창을 열게요.');
+        doLogin();
+      }
+
+      async function updateCase(id,data){
+        try{
+          await runTransaction(db,async(tx)=>{
+            const ref=doc(db,"cases",id);
+            const snap=await tx.get(ref);
+            const prev=snap.exists()?snap.data():{version:0};
+            tx.set(ref,{...data,updatedAt:Date.now(),version:(prev.version||0)+1},{merge:true});
+          });
+        }catch(e){ throw e; }
+      }
+
+      // ▶ 팝업 버튼: ‘확인’은 전송, ‘보류/X’는 단순 닫기
+      async function confirmAckAndClose(){
+        if(!modalTargetId) return;
+        try{
+          await updateCase(modalTargetId,{ ackConfirmed:true });
+          lastSeenReqAt.set(modalTargetId, modalTargetReqAt||Date.now());
+          closeAck();
+          modalTargetId=null;
+        }catch(e){
+          showErr('확인 전송 실패: '+(e.code||'')+' '+e.message);
+        }
+      }
+      // 확인 = 전송
+      ackConfirm.onclick = ()=> requireLoginThen(confirmAckAndClose);
+      // 보류 = 단순 닫기
+      ackHold.onclick    = ()=>{
+        try{
+          if(modalTargetId && modalTargetReqAt){
+            localStorage.setItem(holdKey(modalTargetId, modalTargetReqAt), '1');
+          }
+        }catch(e){}
+        closeAck();
+        modalTargetId=null;
+      };
+      // X = 보류와 동일 (신호 전송 없이 닫기)
+      ackClose.onclick   = ()=>{
+        closeAck();
+        modalTargetId=null;
+      };
+
+    }catch(e){
+      conn.textContent='초기화 오류';conn.className='pill err';
+      showErr('Firebase 초기화 실패: '+(e.message||e));
+    }
+  </script>
+</body>
+</html>
+

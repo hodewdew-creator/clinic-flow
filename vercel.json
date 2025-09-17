@@ -1,0 +1,5 @@
+{
+  "routes": [
+    { "src": "/(display|reception)\\.html", "headers": { "Cache-Control": "no-store" } }
+  ]
+}
