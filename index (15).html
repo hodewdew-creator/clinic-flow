@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
+  <title>백산 원내용 Apps</title>
+  <meta name="color-scheme" content="dark light" />
+  <style>
+    /* ---- Light-first, subtle UI ---- */
+    :root{
+      --bg:#f6f7fb; --fg:#0f172a; --muted:#64748b;
+      --card:#ffffff; --border:#e5e7eb; --brand:#1e40af; --ok:#16a34a; --warn:#b45309;
+      --shadow:0 4px 14px rgba(2,6,23,.06);
+      --radius:14px;
+    }
+    html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:system-ui,-apple-system,Segoe UI,Roboto,Apple SD Gothic Neo,Noto Sans KR}
+    .wrap{max-width:1024px;margin:0 auto;padding:28px}
+    header{background:transparent;display:flex;align-items:center;gap:14px;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap}
+    h1{font-size:clamp(18px,2.2vw,24px);margin:0;display:flex;align-items:center;gap:10px}
+    .badge{font-size:12px;color:#1e293b;background:#e2e8f0;border:1px solid #cbd5e1;padding:4px 8px;border-radius:999px}
+    .userbar{display:flex;gap:10px;align-items:center;min-width:0}
+    .user-email{max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+    .muted{color:var(--muted)}
+    button{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer;min-height:40px}
+    button.ghost{background:#ffffff;border:1px solid var(--border);color:#0f172a}
+    .notice{background:#ffffff;border:1px solid var(--border);padding:14px;border-radius:var(--radius);font-size:clamp(13px,2.8vw,14px);color:var(--muted);margin:12px 0;line-height:1.55;box-shadow:var(--shadow)}
+    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:var(--shadow)}
+    .card-header{display:flex;align-items:center;justify-content:space-between;gap:10px}
+    .card h3{margin:0;font-size:clamp(15px,2.2vw,16px)}
+    .card p{margin:0;color:var(--muted);font-size:13px}
+    .open-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border-radius:10px;border:1px solid var(--border);background:#fff;color:#0f172a;text-decoration:none;white-space:nowrap}
+    .open-btn:hover{border-color:#94a3b8}
+    .hidden{display:none}
+    .footer{opacity:.8;font-size:12px;margin-top:24px;color:#475569}
+    .ok{color:var(--ok)}
+    .warn{color:var(--warn)}
+
+    /* 작은 화면 최적화 */
+    @media (max-width: 640px){
+      .wrap{padding:16px}
+      header{gap:10px}
+      .userbar{width:100%;justify-content:space-between}
+      .user-email{max-width:60vw}
+      .grid{gap:12px}
+      .card{padding:14px}
+      button{min-height:44px}
+    }
+
+    /* Dark mode fallback */
+    @media (prefers-color-scheme: dark){
+      :root{ --bg:#0b1220; --fg:#ffffff; --muted:#9ca3af; --card:#0f172acc; --border:#1f2937; --brand:#2b5fa3; --shadow:none; }
+      .badge{background:#0f172a;border-color:#1f2937;color:#cbd5e1}
+      .notice,.card{backdrop-filter:blur(8px)}
+      .open-btn{background:#111827;color:#e5e7eb;border-color:#1f2937}
+      .footer{color:#cbd5e1}
+    }
+  </style>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // 실제 Firebase 설정 키 적용
+    const firebaseConfig = {
+      apiKey: "AIzaSyCpA-7WDng0fwzkm5WcVB4s9wh_Dal9SLg",
+      authDomain: "bs-apps-26acf.firebaseapp.com",
+      projectId: "bs-apps-26acf",
+      storageBucket: "bs-apps-26acf.firebasestorage.app",
+      messagingSenderId: "383017805783",
+      appId: "1:383017805783:web:15266bdafd94bb03ee0d92"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db   = getFirestore(app);
+
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
+    const elSignedOut = document.getElementById('signed-out');
+    const elSignedIn  = document.getElementById('signed-in');
+    const elUserInfo  = document.getElementById('user-info');
+    const elAccessMsg = document.getElementById('access-msg');
+    const elApps      = document.getElementById('apps');
+
+    async function isAllowedEmail(email){
+      if(!email) return false;
+      try{
+        const snap = await getDoc(doc(db, 'allowed_emails', email));
+        return snap.exists();
+      }catch(e){
+        console.error(e);
+        return false;
+      }
+    }
+
+    onAuthStateChanged(auth, (user) => {
+      (async () => {
+        if (user) {
+          const email = (user.email || '').trim().toLowerCase();
+          const ok = await isAllowedEmail(email);
+          elUserInfo.textContent = `${email}`;
+          elAccessMsg.innerHTML = ok
+            ? `<span class=\"ok\">접근 허용</span> — 사내 전용 앱 목록이 표시됩니다.`
+            : `<span class=\"warn\">접근 제한</span> — 허용되지 않은 계정입니다. (백산 공식 Gmail 등록 필요)`;
+
+          elSignedOut.classList.add('hidden');
+          elSignedIn.classList.remove('hidden');
+          elApps.classList.toggle('hidden', !ok);
+        } else {
+          elSignedIn.classList.add('hidden');
+          elApps.classList.add('hidden');
+          elSignedOut.classList.remove('hidden');
+        }
+      })();
+    });
+
+    document.getElementById('btnSignIn').addEventListener('click', async () => {
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (e) {
+        alert('로그인 실패: ' + (e?.message || e));
+      }
+    });
+
+    document.getElementById('btnSignOut').addEventListener('click', async () => {
+      await signOut(auth);
+    });
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>백산 원내용 Apps <span class="badge">Google 로그인 필요</span></h1>
+      <div class="userbar">
+        <span id="user-info" class="user-email"></span>
+        <button id="btnSignOut" class="ghost">로그아웃</button>
+      </div>
+    </header>
+
+    <!-- 비로그인 상태 -->
+    <section id="signed-out" class="notice">
+      <strong>※ 이 페이지는 사내 전용 페이지로서 백산 공식 gmail 계정으로만 접근이 가능합니다. 개인 이메일 주소 등록을 원하실 경우, Hyun에게 요청해주세요</strong>
+      <div style="margin-top:10px"><button id="btnSignIn">Google로 로그인</button></div>
+    </section>
+
+    <!-- 로그인 상태 공지 & 접근권한 안내 -->
+    <section id="signed-in" class="notice hidden">
+      <div id="access-msg"></div>
+    </section>
+
+    <!-- 사내 앱 목록 (권한 통과 시에만 표시) -->
+    <section id="apps" class="hidden">
+      <div class="grid" style="margin-top:14px">
+        <article class="card">
+          <div class="card-header">
+            <h3>백산 보호자 모니터 (리셉용)</h3>
+            <a class="open-btn" href="https://bs-owner-monitor.vercel.app/reception.html" target="_blank" rel="noopener">열기 ↗</a>
+          </div>
+          <p>리셉션 단말에서 보호자 호출·상태 관리</p>
+        </article>
+        <article class="card">
+          <div class="card-header">
+            <h3>백산 보호자 모니터 (내부용)</h3>
+            <a class="open-btn" href="https://bs-owner-monitor.vercel.app/display.html" target="_blank" rel="noopener">열기 ↗</a>
+          </div>
+          <p>디스플레이/내부 단말에서 대기 현황 표시</p>
+        </article>
+        <article class="card">
+          <div class="card-header">
+            <h3>백산 이미지 파일 업로더</h3>
+            <a class="open-btn" href="https://bs-image-uploader.vercel.app/" target="_blank" rel="noopener">열기 ↗</a>
+          </div>
+          <p>이미지(jpg,png)자료를 안전하게 선택 dropbox폴더에 업로드</p>
+        </article>
+        <article class="card">
+          <div class="card-header">
+            <h3>백산 FORCAT 건강검진 결과서</h3>
+            <a class="open-btn" href="https://bs-health-report-editor.vercel.app/" target="_blank" rel="noopener">열기 ↗</a>
+          </div>
+          <p>검진 결과서 작성·편집 도우미툴</p>
+        </article>
+      </div>
+
+      <div class="footer">※ 이 페이지는 사내 전용입니다. 외부 공유 금지.</div>
+    </section>
+  </div>
+</body>
+</html>
