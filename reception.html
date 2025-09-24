@@ -349,12 +349,12 @@
 
         // 작은 배너: 콜요청 우선, 없으면 전달완료 배너
         if(anyReq){
-          alertWho.textContent=prettyName(anyReq.d,anyReq.id);
+ alertWho.textContent=`📣 [${anyReq.d.callRequestedBy || '디스플레이'}] ${prettyName(anyReq.d,anyReq.id)}`;
           alertBox.classList.add('show');
           relayBox.classList.remove('show');
         }else if(anyAck){
           const name=prettyName(anyAck.d,anyAck.id);
-          relayBox.textContent=`📣 '${name}' 대기중 전달완료`;
+ relayBox.textContent=`📣 [${anyAck.d.ackDevice || '디스플레이'}] '${name}' 대기중 전달완료`;
           relayBox.style.display="";
           relayBox.classList.add('show');
           alertBox.classList.remove('show');
@@ -374,7 +374,7 @@
         if(anyReq && anyReq.id!==lastAlertedId){
           pendingReq=anyReq;
           modalTitle.textContent='📣 콜 요청';
-          showBigOverlay(prettyName(anyReq.d,anyReq.id));
+    showBigOverlay(`${prettyName(anyReq.d,anyReq.id)} · ${anyReq.d.callRequestedBy || '디스플레이'}`);
           try{ bell.currentTime=0; bell.play().catch(()=>{});}catch(e){}
           lastAlertedId=anyReq.id;
         }
