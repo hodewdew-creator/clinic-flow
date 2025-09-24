@@ -132,6 +132,21 @@
     const loginBtn=document.getElementById('loginBtn');
     const logoutBtn=document.getElementById('logoutBtn');
 
+        // ---- Device name resolve & persist ----
+    function resolveDeviceName(){
+      try{
+        const KEY='deviceName';
+        let n=localStorage.getItem(KEY);
+        if(!n){
+          const guess=(navigator.userAgentData?.platform||navigator.platform||'').replace(/\s+/g,'-');
+          n=prompt('이 디스플레이 이름을 입력하세요 (예: 대기실-모니터)', guess || '');
+          if(n) localStorage.setItem(KEY, n);
+        }
+        return n || '디스플레이';
+      }catch(e){ return '디스플레이'; }
+    }
+    const DEVICE_NAME = resolveDeviceName();
+  
     const showErr=(m)=>{console.error(m);errBox.textContent=m;errBox.classList.add('show')};
     const hideErr=()=>errBox.classList.remove('show');
 
@@ -210,7 +225,7 @@
       loginBtn.onclick=doLogin;
       logoutBtn.onclick=async()=>{ try{ await signOut(auth); }catch(e){ showErr('로그아웃 실패: '+e.message);} };
       onAuthStateChanged(auth,(user)=>{
-        if(user){ whoami.textContent=user.email; logoutBtn.style.display=''; loginBtn.style.display='none'; }
+        if(user){ whoami.textContent = user.email ? `${user.email} · ${DEVICE_NAME}` : DEVICE_NAME; logoutBtn.style.display=''; loginBtn.style.display='none'; }
         else{ whoami.textContent=''; logoutBtn.style.display='none'; loginBtn.style.display=''; }
       });
 
@@ -313,7 +328,7 @@
           const actions=document.createElement('div');actions.className='actions';
           const callBtn=document.createElement('button');callBtn.className='btn';callBtn.textContent='📣 콜요청하기';
           const cancelBtn=document.createElement('button');cancelBtn.className='btn ghost';cancelBtn.textContent='콜요청취소';
-          callBtn.onclick=()=> requireLoginThen(()=>updateCase(d.id,{callRequested:true,callRequestedAt:Date.now()}));
+    callBtn.onclick=()=> requireLoginThen(()=>updateCase(d.id,{callRequested:true,callRequestedAt:Date.now(),callRequestedBy:DEVICE_NAME}));
           cancelBtn.onclick=()=> requireLoginThen(()=>updateCase(d.id,{callRequested:false}));
           actions.appendChild(callBtn);actions.appendChild(cancelBtn);
           card.appendChild(actions);
@@ -344,10 +359,10 @@
       }
 
       // ▶ 팝업 버튼: ‘확인’은 전송, ‘보류/X’는 단순 닫기
-      async function confirmAckAndClose(){
+     async function confirmAckAndClose(){
         if(!modalTargetId) return;
         try{
-          await updateCase(modalTargetId,{ ackConfirmed:true });
+     await updateCase(modalTargetId,{ ackConfirmed:true, ackDevice: DEVICE_NAME, ackAt: Date.now() });
           lastSeenReqAt.set(modalTargetId, modalTargetReqAt||Date.now());
           closeAck();
           modalTargetId=null;
