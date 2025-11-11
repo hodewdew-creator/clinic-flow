@@ -417,7 +417,7 @@ ringWithFallback('상태 알림', `${nm}: ${state}`, 'case-update');
 // === 카드 DOM ===
 const card = document.createElement('div');
 card.className = 'card';
-card.dataset.id = d.id; // ✅ 테두리 적용용
+card.dataset.id = d.id; // 카드 식별용
 
 // 콜요청: 고정 테두리 유지
 if (d.callRequested) {
@@ -431,10 +431,13 @@ const isWaitState =
 const reqAt = Number(d.ackRequestedAt || 0);
 const resolvedAt = Number(d.ackResolvedAt || 0);
 
-// "전달 안 된 상태" 조건:
-// - 상담/면회 상태이고
-// - ackRequestedAt이 설정되어 있고
-// - 그 이후를 커버하는 ackResolvedAt이 없다
+// "전달 안 된 상태"라고 보는 조건:
+// 1) 상담/면회 상태이고
+// 2) 전달요청 시각(ackRequestedAt)이 있고
+// 3) 그 이후를 덮는 ackResolvedAt이 없다
+//
+// → 한 번이라도 '확인' 눌러서 ackResolvedAt >= ackRequestedAt 이면,
+//   이후 리셋(ackConfirmed:false)되더라도 다시 점멸하지 않음.
 const needsAck =
   isWaitState &&
   reqAt > 0 &&
@@ -443,6 +446,7 @@ const needsAck =
 if (needsAck) {
   card.classList.add('pending-ack');
 }
+
 
 
           const head=document.createElement('div');head.className='head';
