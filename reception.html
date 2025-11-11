@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Clinic-flow (리셉용)</title>
+  <title>BS 보호자 모니터 (리셉용)</title>
   <style>
     :root{
       --bg:#fafafa; --card:#ffffff; --border:#e5e7eb;
@@ -89,7 +89,8 @@
 
   <main>
     <h1>
-      <img class="logo" src="image-512.png" alt="BS Logo" /> Clinic-flow (리셉용)
+      <img class="logo" src="image-512.png" alt="BS Logo" />
+      BS 보호자 모니터 (리셉용)
     </h1>
 
     <div id="err" class="errbox"></div>
@@ -172,7 +173,7 @@
       const { getFirestore, collection, addDoc, onSnapshot, doc, runTransaction, query, orderBy, setDoc, deleteDoc }=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
       const { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut }=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
 
-      const firebaseConfig={apiKey:"AIzaSyDh_LCBSgYZX1nnz3C-kGzjVtIwI3zf_8g",authDomain:"clinic-flow-c26f6.firebaseapp.com",projectId:"clinic-flow-c26f6"};
+      const firebaseConfig={apiKey:"AIzaSyDxhY_FjNOp_F0g-DXypaoN7RRjFqNIoG4",authDomain:"bs-owner-monitor.firebaseapp.com",projectId:"bs-owner-monitor"};
       const app=initializeApp(firebaseConfig);
       const db=getFirestore(app);
       const auth=getAuth(app);
@@ -348,13 +349,15 @@
         }
 
         // 작은 배너: 콜요청 우선, 없으면 전달완료 배너
-        if(anyReq){
- alertWho.textContent=`📣 [${anyReq.d.callRequestedBy || '디스플레이'}] ${prettyName(anyReq.d,anyReq.id)}`;
+   if(anyReq){
+      alertWho.textContent=`📣 [${anyReq.d.callRequestedBy || '디스플레이'}] ${prettyName(anyReq.d,anyReq.id)}`;
+
           alertBox.classList.add('show');
           relayBox.classList.remove('show');
         }else if(anyAck){
           const name=prettyName(anyAck.d,anyAck.id);
- relayBox.textContent=`📣 [${anyAck.d.ackDevice || '디스플레이'}] '${name}' 대기중 전달완료`;
+      relayBox.textContent=`📣 [${anyAck.d.ackDevice || '디스플레이'}] '${name}' 대기중 전달완료`;
+
           relayBox.style.display="";
           relayBox.classList.add('show');
           alertBox.classList.remove('show');
@@ -364,7 +367,7 @@
           setTimeout(async()=>{
             relayBox.classList.remove('show');
             await updateCase(anyAck.id,{ackConfirmed:false});
-          },1500);
+          },5000);
         }else{
           alertBox.classList.remove('show');
           relayBox.classList.remove('show');
@@ -374,7 +377,7 @@
         if(anyReq && anyReq.id!==lastAlertedId){
           pendingReq=anyReq;
           modalTitle.textContent='📣 콜 요청';
-    showBigOverlay(`${prettyName(anyReq.d,anyReq.id)} · ${anyReq.d.callRequestedBy || '디스플레이'}`);
+        showBigOverlay(`${prettyName(anyReq.d,anyReq.id)} · ${anyReq.d.callRequestedBy || '디스플레이'}`);
           try{ bell.currentTime=0; bell.play().catch(()=>{});}catch(e){}
           lastAlertedId=anyReq.id;
         }
