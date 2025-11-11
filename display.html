@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no"/>
-  <title>BS 보호자 모니터 (내부용)</title>
+  <title>Clinic-flow (내부용)</title>
   <style>
     :root{
       --bg:#0b1220; --fg:#ffffff; --muted:#9ca3af;
@@ -34,16 +34,8 @@
       background:var(--card); border:1px solid var(--border); border-radius:16px;
       padding:14px; display:flex; flex-direction:column; gap:10px;
     }
-    /* 콜요청 = 고정 테두리(무한 점멸 제거) */
-    .card.call{outline:4px solid rgba(220,38,38,.6); outline-offset:-4px; animation:none;}
-
+    .card.call{outline:4px solid rgba(220,38,38,.6); outline-offset:-4px; animation:call 1.2s linear infinite}
     @keyframes call{0%,100%{outline-color:rgba(220,38,38,.2)}50%{outline-color:rgba(220,38,38,.8)}}
-
-    /* 🔔 상담/면회/메모 신규시 5~6초 붉은 테두리 */
-    .card.flash5{
-      outline:4px solid rgba(220,38,38,.8);
-      outline-offset:-4px;
-    }
 
     .head{display:flex; align-items:center; justify-content:space-between; gap:10px}
     .name{font-weight:900; font-size:18px; word-break:keep-all}
@@ -70,11 +62,12 @@
     .actions{display:flex; gap:8px; flex-wrap:wrap}
     .btn{cursor:pointer; border:0; border-radius:10px; padding:8px 12px; font-size:13px; font-weight:700;
       background:#1f2937; color:#fff; border:1px solid #374151;}
-    .btn.ghost{background:transparent; color:#9ca3af}
+    .btn.ghost{background:transparent; color:#9CA3AF}
 
     .errbox{display:none;background:#fee2e2;color:#7f1d1d;border:2px solid #ef4444;border-radius:12px;padding:10px 12px;margin:8px 0;font-weight:700;white-space:pre-wrap}
     .errbox.show{display:block}
 
+    /* ====== 확인 팝업(오버레이) ====== */
     .overlay{position:fixed; inset:0; z-index:50; display:none; align-items:center; justify-content:center; background:rgba(2,6,23,.65); backdrop-filter:blur(4px)}
     .overlay.show{display:flex}
     .modal{width:min(720px,92vw); background:#fff; color:#0f172a; border-radius:16px; border:3px solid #ef4444; box-shadow:0 20px 60px rgba(0,0,0,.35); padding:22px; text-align:center; animation:flash .9s ease-in-out 1}
@@ -92,26 +85,18 @@
     .modal{will-change:transform; transform:translateZ(0);}
     .btn.ghost{ background:#1f2937; border:1px solid #4b5563; opacity:.9 }
     .btn.ghost:active{ transform: translateY(1px); }
-
-    .card.pending-ack {
-  outline: 4px solid rgba(220,38,38,.8);
-  outline-offset: -4px;
-  animation: call 1s infinite; /* 기존 call 애니메이션 재사용 */
-}
-
   </style>
 </head>
 <body>
   <div class="topbar">
     <div class="brandwrap">
       <img class="logo" src="image-512.png" alt="BS Logo" />
-      <div class="brand">BS 보호자 모니터 (내부용)</div>
+      <div class="brand">Clinic-flow (내부용)</div>
     </div>
     <div class="right">
       <span id="whoami" class="whoami"></span>
       <button id="loginBtn" class="tbtn ok">Google 로그인</button>
       <button id="logoutBtn" class="tbtn" style="display:none">로그아웃</button>
-      <button id="soundBtn" class="tbtn" title="소리: 켬" aria-pressed="true">🔊</button>
       <span id="conn" class="pill warn">연결 확인 중…</span>
     </div>
   </div>
@@ -121,8 +106,10 @@
     <div id="grid" class="grid"></div>
   </div>
 
-  <audio id="ding" src="ding.mp3" preload="auto"></audio>
+  <!-- 🔔 알림음 (ding.mp3, ) -->
+  <audio id="ding" src="./ding.mp3" preload="auto"></audio>
 
+  <!-- ▶ 확인 팝업(디스플레이 측) -->
   <div id="ackOverlay" class="overlay" aria-hidden="true">
     <button id="ackClose" class="m-close" title="닫기">✕</button>
     <div class="modal" role="dialog" aria-modal="true">
@@ -145,74 +132,7 @@
     const loginBtn=document.getElementById('loginBtn');
     const logoutBtn=document.getElementById('logoutBtn');
 
-    // ===== 소리/알림 토글 & 통합 울림 유틸 =====
-const soundBtn = document.getElementById('soundBtn');
-
-function isHidden(){ return document.hidden === true; }
-function isSoundOn(){
-  try{ return localStorage.getItem('soundOn') !== '0'; }catch(e){ return true; } // 기본: 켬
-}
-function setSound(on){
-  try{ localStorage.setItem('soundOn', on ? '1' : '0'); }catch(e){}
-  updateSoundUI();
-}
-function updateSoundUI(){
-  const on = isSoundOn();
-  if(!soundBtn) return;
-  soundBtn.textContent = on ? '🔊' : '🔇';
-  soundBtn.title = on ? '소리: 켬' : '소리: 끔';
-  soundBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-}
-
-function canSystemNotify(){ return 'Notification' in window; }
-async function ensureNotifyPermissionIfNeeded(){
-  if(!canSystemNotify()) return false;
-  // 권한이 없는데 창이 숨김 상태면 시스템 알림이 막혀서 울리지 않을 수 있음 → 미리 요청
-  if(Notification.permission === 'granted') return true;
-  if(Notification.permission === 'denied') return false;
-  const res = await Notification.requestPermission();
-  return res === 'granted';
-}
-
-/** 소리/알림 통합 울림
- * - 켬(🔊)일 때만 동작
- * - 보이는 중: ding.mp3 재생
- * - 숨김/최소화: ding 재생 + 시스템 알림(윈도우 기본 효과음 기대)
- */
-async function ringWithFallback(title, body, tag='bs-owner-monitor'){
-  if(!isSoundOn()) return; // 🔇이면 무음
-  // 1) 사운드 시도
-  try{ ding.currentTime = 0; await ding.play(); }catch(e){ /* 브라우저 정책에 따라 무시될 수 있음 */ }
-
-  // 2) 숨김(백그라/최소화)일 때 시스템 알림도
-  if(isHidden() && canSystemNotify()){
-    const ok = await ensureNotifyPermissionIfNeeded();
-    if(ok){
-      new Notification(title, {
-        body, tag, renotify:true, requireInteraction:true, timestamp:Date.now(), silent:false
-      });
-    }
-  }
-}
-
-// 토글 버튼 클릭
-if (soundBtn){
-  soundBtn.onclick = async ()=>{
-    const next = !isSoundOn();
-    setSound(next);
-    // 켬으로 바꾸는 순간, 최소화 대응 위해 권한 미리 확보 시도(거부해도 동작은 유지)
-    if(next && canSystemNotify() && Notification.permission !== 'granted'){
-      await ensureNotifyPermissionIfNeeded();
-      updateSoundUI();
-    }
-  };
-  // 초기 UI 동기화
-  updateSoundUI();
-}
-// 브라우저 시작 시 권한이 이미 granted면 그대로, 아니면 나중에 ring 시 요청
-
-    
-    // ---- Device name resolve & persist ----
+        // ---- Device name resolve & persist ----
     function resolveDeviceName(){
       try{
         const KEY='deviceName';
@@ -226,8 +146,7 @@ if (soundBtn){
       }catch(e){ return '디스플레이'; }
     }
     const DEVICE_NAME = resolveDeviceName();
-
-    
+  
     const showErr=(m)=>{console.error(m);errBox.textContent=m;errBox.classList.add('show')};
     const hideErr=()=>errBox.classList.remove('show');
 
@@ -271,27 +190,19 @@ if (soundBtn){
       ackWho.textContent = name;
       ackOverlay.classList.add('show');
       ackOverlay.setAttribute('aria-hidden','false');
-      ringWithFallback('대기 환자 확인', `${name} 확인 필요`, 'ack-popup');
+      try{ ding.currentTime=0; ding.play().catch(()=>{});}catch(e){}
     }
     function closeAck(){
       ackOverlay.classList.remove('show');
       ackOverlay.setAttribute('aria-hidden','true');
     }
 
-    /* 🔔 5~6초 붉은 테두리 유지 (상담/면회/메모 신규) */
-    function flashSolidById(id, ms=5600){
-      const el = document.querySelector(`.card[data-id="${id}"]`);
-      if(!el) return;
-      el.classList.add('flash5');
-      setTimeout(()=> el.classList.remove('flash5'), ms);
-    }
-
-    try{
+        try{
       const { initializeApp }=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js");
       const { getFirestore, collection, onSnapshot, query, orderBy, runTransaction, doc }=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js");
       const { getAuth, setPersistence, browserLocalPersistence, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut }=await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
 
-      const firebaseConfig={apiKey:"AIzaSyDxhY_FjNOp_F0g-DXypaoN7RRjFqNIoG4",authDomain:"bs-owner-monitor.firebaseapp.com",projectId:"bs-owner-monitor"};
+      const firebaseConfig={apiKey:"AIzaSyDh_LCBSgYZX1nnz3C-kGzjVtIwI3zf_8g",authDomain:"clinic-flow-c26f6.firebaseapp.com",projectId:"clinic-flow-c26f6"};
       const app=initializeApp(firebaseConfig);
       db=getFirestore(app);
 
@@ -324,7 +235,7 @@ if (soundBtn){
         const docs = snap.docs.map(x=>({ id:x.id, ...x.data() }));
         const byId = new Map(docs.map(d=>[d.id,d]));
 
-        // 다른 기기에서 확인되면 현재 팝업 닫기
+        // 다른 기기에서 '확인' 처리되면 현재 팝업 닫기
         if (modalTargetId) {
           const fresh = byId.get(modalTargetId);
           if (fresh) {
@@ -337,7 +248,7 @@ if (soundBtn){
           }
         }
 
-        // 새 요청 탐지 → 팝업 (상담/면회만)
+        // 새 요청 탐지 → 팝업 오픈 (상담/면회만)
         if (!modalTargetId) {
           const cands = docs.filter(d=>{
             const s=d.location||'';
@@ -355,12 +266,12 @@ if (soundBtn){
           }
         }
 
-        // 카드 렌더 및 알림 트리거 계산 준비
+        // 카드 렌더 및 알림음 트리거
         const frag=document.createDocumentFragment();
         if(!window._prevState){ window._prevState=new Map(); window._prevHasMemo=new Map(); window._lastCall=new Set(); window._inited=false; }
         const prevState=window._prevState, prevHasMemo=window._prevHasMemo, lastCall=window._lastCall, inited=window._inited;
 
-        // 정렬 우선순위
+        // 정렬: 상담/면회(0) → 진료실(1) → 기타(2) → 귀가/수납후미귀가(3)
         docs.sort((a,b)=>{
           const rank=(d)=>{
             const s=d.location||'';
@@ -374,61 +285,24 @@ if (soundBtn){
           return (b.createdAt||0)-(a.createdAt||0);
         });
 
-        const toFlashSolid = []; // ✅ 이번 프레임에서 5~6초 붉은 테두리 줄 대상
         docs.forEach(d=>{
           let shouldDing=false;
           const curState=d.location||"";
           const curHasMemo=!!((d.memo||"").trim());
 
           if(inited){
-            if(d.callRequested && !lastCall.has(d.id)) shouldDing=true;                   // 콜 새로 켜짐
+            if(d.callRequested && !lastCall.has(d.id)) shouldDing=true;
             const ps=prevState.get(d.id);
-            if((curState==="상담대기중"||curState==="면회대기중") && curState!==ps) shouldDing=true; // 상담/면회 진입
+            if((curState==="상담대기중"||curState==="면회대기중") && curState!==ps) shouldDing=true;
             const pm=prevHasMemo.get(d.id);
-            if(curHasMemo && !pm) shouldDing=true;                                       // 메모 신규
+            if(curHasMemo && !pm) shouldDing=true;
           }
-
-          // 콜요청 집합 갱신
           if(d.callRequested) lastCall.add(d.id); else lastCall.delete(d.id);
+          if(shouldDing){ try{ ding.currentTime=0; ding.play().catch(()=>{});}catch(e){} }
+          prevState.set(d.id,curState); prevHasMemo.set(d.id,curHasMemo);
 
-          // 🔔 소리 트리거가 났고, "콜 새로 켜짐"이 아닌 경우 → 5~6초 붉은 테두리
-          const isNewCall = (d.callRequested && !inited && false) || (d.callRequested && !prevState.has(d.id)) ? false
-                            : (d.callRequested && !window._lastCall.has(d.id)); // 보호적 계산
-          // 위 한 줄은 방어적이지만, 실제로는 아래처럼 간단히:
-          // const isNewCall = (d.callRequested && !window._lastCall.has(d.id));
-
-          if(shouldDing){
-            // 새 콜이 아니라면(= 상담/면회 진입 또는 메모 신규), 잠시 붉은 테두리
-            const newCallNow = (d.callRequested && !window._lastCall.has(d.id));
-            if(!newCallNow){
-              toFlashSolid.push(d.id);
-            }
-            const nm = (d.patientName||d.guardianName)
-  ? (d.patientName && d.guardianName ? `${d.patientName}(${d.guardianName})` : (d.patientName||d.guardianName))
-  : d.id;
-const state = (d.location||'상태변경');
-ringWithFallback('상태 알림', `${nm}: ${state}`, 'case-update');
-
-          }
-
-          prevState.set(d.id,curState);
-          prevHasMemo.set(d.id,curHasMemo);
-
-          // === 카드 DOM ===
-          const card=document.createElement('div');
-          card.className='card';
-          card.dataset.id = d.id;                             // ✅ 테두리 적용을 위한 data-id
-          if(d.callRequested) card.classList.add('call');     // 콜요청 고정 테두리
-
-          // 🔴 상담/면회대기중이면서 아직 리셉션에서 전달완료(ackConfirmed)가 안 된 건 점멸 표시
-const needsAck =
-  (d.location === "상담대기중" || d.location === "면회대기중") &&
-  d.ackRequestedAt > 0 &&
-  !d.ackConfirmed;
-
-if (needsAck) {
-  card.classList.add('pending-ack');
-}
+          const card=document.createElement('div');card.className='card';
+          if(d.callRequested) card.classList.add('call');
 
           const head=document.createElement('div');head.className='head';
           const name=document.createElement('div');name.className='name';
@@ -454,24 +328,16 @@ if (needsAck) {
           const actions=document.createElement('div');actions.className='actions';
           const callBtn=document.createElement('button');callBtn.className='btn';callBtn.textContent='📣 콜요청하기';
           const cancelBtn=document.createElement('button');cancelBtn.className='btn ghost';cancelBtn.textContent='콜요청취소';
-        callBtn.onclick=()=> requireLoginThen(()=>updateCase(d.id,{callRequested:true,callRequestedAt:Date.now(),callRequestedBy:DEVICE_NAME}));
+    callBtn.onclick=()=> requireLoginThen(()=>updateCase(d.id,{callRequested:true,callRequestedAt:Date.now(),callRequestedBy:DEVICE_NAME}));
           cancelBtn.onclick=()=> requireLoginThen(()=>updateCase(d.id,{callRequested:false}));
           actions.appendChild(callBtn);actions.appendChild(cancelBtn);
           card.appendChild(actions);
 
           frag.appendChild(card);
         });
-
-        const gridEl=document.getElementById('grid');
-        gridEl.innerHTML='';
-        gridEl.appendChild(frag);
-
-        // ✅ 렌더 완료 후, 상담/면회/메모 신규였던 카드들만 5~6초 붉은 테두리
-        requestAnimationFrame(()=>{
-          toFlashSolid.forEach(id => flashSolidById(id));
-        });
-
+        const gridEl=document.getElementById('grid'); gridEl.innerHTML=''; gridEl.appendChild(frag);
         window._inited=true;
+
         conn.textContent='연결됨'; conn.className='pill ok';
       },(e)=>{conn.textContent='연결 오류';conn.className='pill err';showErr('리스트 구독 실패: '+e.message);});
 
@@ -496,8 +362,7 @@ if (needsAck) {
      async function confirmAckAndClose(){
         if(!modalTargetId) return;
         try{
-   await updateCase(modalTargetId,{ ackConfirmed:true, ackDevice: DEVICE_NAME, ackAt: Date.now(), ackResolvedAt: Date.now() });
-
+     await updateCase(modalTargetId,{ ackConfirmed:true, ackDevice: DEVICE_NAME, ackAt: Date.now() });
           lastSeenReqAt.set(modalTargetId, modalTargetReqAt||Date.now());
           closeAck();
           modalTargetId=null;
@@ -517,7 +382,7 @@ if (needsAck) {
         closeAck();
         modalTargetId=null;
       };
-      // X = 보류와 동일
+      // X = 보류와 동일 (신호 전송 없이 닫기)
       ackClose.onclick   = ()=>{
         closeAck();
         modalTargetId=null;
