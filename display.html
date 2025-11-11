@@ -92,6 +92,13 @@
     .modal{will-change:transform; transform:translateZ(0);}
     .btn.ghost{ background:#1f2937; border:1px solid #4b5563; opacity:.9 }
     .btn.ghost:active{ transform: translateY(1px); }
+
+    .card.pending-ack {
+  outline: 4px solid rgba(220,38,38,.8);
+  outline-offset: -4px;
+  animation: call 1s infinite; /* 기존 call 애니메이션 재사용 */
+}
+
   </style>
 </head>
 <body>
@@ -412,6 +419,16 @@ ringWithFallback('상태 알림', `${nm}: ${state}`, 'case-update');
           card.className='card';
           card.dataset.id = d.id;                             // ✅ 테두리 적용을 위한 data-id
           if(d.callRequested) card.classList.add('call');     // 콜요청 고정 테두리
+
+          // 🔴 상담/면회대기중이면서 아직 리셉션에서 전달완료(ackConfirmed)가 안 된 건 점멸 표시
+const needsAck =
+  (d.location === "상담대기중" || d.location === "면회대기중") &&
+  d.ackRequestedAt > 0 &&
+  !d.ackConfirmed;
+
+if (needsAck) {
+  card.classList.add('pending-ack');
+}
 
           const head=document.createElement('div');head.className='head';
           const name=document.createElement('div');name.className='name';
